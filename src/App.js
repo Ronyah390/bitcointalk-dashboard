@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, query, where, orderBy, Timestamp } from 'firebase/firestore';
-import LeaderboardPage from './LeaderboardPage'; // Import the new leaderboard component
+import LeaderboardPage from './LeaderboardPage'; // Make sure you have created LeaderboardPage.jsx
 
 // =================================================================================
 // YOUR FIREBASE CONFIGURATION
@@ -52,7 +52,7 @@ const Header = ({ onNavigate, currentPage }) => (
                  <svg className="w-8 h-8 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 Bitcointalk Dashboard
             </div>
-            {/* --- UPDATED: Navigation Buttons --- */}
+            {/* --- NEW: Navigation Buttons --- */}
             <nav className="flex space-x-2">
                 <button 
                     onClick={() => onNavigate('home')}
@@ -217,7 +217,8 @@ function App() {
     };
 
     const renderPage = () => {
-        if (loading) {
+        // --- UPDATED: No longer show loading spinner for leaderboard as it has its own ---
+        if (loading && page !== 'leaderboard') {
             return <LoadingSpinner />;
         }
 
