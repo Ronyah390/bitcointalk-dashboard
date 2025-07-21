@@ -5,31 +5,113 @@ import re
 from datetime import datetime, timedelta
 import json
 import argparse
-from vercel_blob import put # --- CHANGE: Import Vercel Blob
-from dotenv import load_dotenv # --- CHANGE: To handle local testing
+from vercel_blob import put
+from dotenv import load_dotenv
 
-# --- CHANGE: Load environment variables for local testing ---
+# Load environment variables for local testing (e.g., from a .env file)
 load_dotenv()
 
-# --- (The scraping and leaderboard building functions are the same as before) ---
-# --- CONFIG, extract_full_snapshot_from_post, fetch_snapshots ---
-# (These functions are identical to the previous version, so they are omitted here for brevity)
-# (Please copy them from the previous script version)
+# --- CONFIG ---
+BASE_URL = "https://bitcointalk.org/index.php?topic=3078328."
+HEADERS = {'User-Agent': 'Mozilla/5.0'}
+CUTOFF_DATE = datetime.now() - timedelta(days=130)
+
+# --- SCRAPING FUNCTIONS ---
+def extract_full_snapshot_from_post(post_html):
+    post_text = post_html.get_text()
+    date_match = re.search(r"\((\d{4}-\d{2}-\d{2}_\w+_\d{2}\.\d{2}h)\)", post_text)
+    if not date_match:
+        return None
+    
+    snapshot_date_str = date_match.group(1).split('_')[0]
+    merit_file_link_tag = post_html.find('a', href=re.compile(r"all_users_who_earned_Merit.*?\.txt"))
+    if not merit_file_link_tag:
+        return None
+        
+    merit_file_url = merit_file_link_tag['href']
+    print(f"    -> Found data file: {merit_file_url}")
+    
+    try:
+        file_res = requests.get(merit_file_url, headers=HEADERS, timeout=30)
+        file_res.raise_for_status()
+        merit_block = file_res.text
+    except requests.exceptions.RequestException as e:
+        print(f"    ⚠️ Could not download merit file: {e}")
+        return None
+
+    pattern = re.compile(r"([\d,]+)\s+Merit received by\s+(.+?)\s+\(#(\d+)\)")
+    users = []
+    for match in pattern.finditer(merit_block):
+        merits, username, user_id = match.groups()
+        users.append({
+            "username": username.strip(),
+            "userId": int(user_id),
+            "merits": int(merits.replace(',', ''))
+        })
+        
+    if users:
+        return {"date": snapshot_date_str, "users": users}
+    return None
+
+def fetch_snapshots(mode='initial'):
+    all_snapshots = []
+    pages_to_scan_count = 1 if mode == 'update' else 8
+    print(f"🚀 Running in '{mode}' mode. Will scan up to {pages_to_scan_count} pages.")
+    
+    last_page_res = requests.get(f"{BASE_URL}99999", headers=HEADERS, timeout=20)
+    last_page_soup = BeautifulSoup(last_page_res.text, 'html.parser')
+    last_page_num = int(last_page_soup.find_all('a', class_='navPages')[-1].text)
+    start_offset = (last_page_num - 1) * 20
+    pages_to_scan_offsets = [start_offset - (i * 20) for i in range(pages_to_scan_count)]
+
+    for page_offset in pages_to_scan_offsets:
+        if page_offset < 0: continue
+        url = f"{BASE_URL}{page_offset}"
+        print(f"🟡 Scraping page: {url}")
+        try:
+            res = requests.get(url, headers=HEADERS, timeout=20)
+            res.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ Failed to fetch {url}: {e}")
+            continue
+        
+        soup = BeautifulSoup(res.text, 'html.parser')
+        posts = soup.find_all('td', class_='td_headerandpost')
+        oldest_date_on_page = datetime.now()
+
+        for post in posts:
+            author_tag = post.find_previous_sibling('td', class_='poster_info')
+            if not author_tag or 'LoyceV' not in author_tag.get_text(): continue
+            snapshot = extract_full_snapshot_from_post(post)
+            if snapshot:
+                all_snapshots.append(snapshot)
+                current_date = datetime.strptime(snapshot["date"], "%Y-%m-%d")
+                if current_date < oldest_date_on_page: oldest_date_on_page = current_date
+        
+        if mode == 'initial' and oldest_date_on_page < CUTOFF_DATE:
+            print("ℹ️ Reached data older than 130 days. Stopping initial scrape.")
+            break
+            
+    unique_snapshots = {snap['date']: snap for snap in all_snapshots}.values()
+    return sorted(list(unique_snapshots), key=lambda x: x['date'], reverse=True)
 
 def build_and_save_leaderboard(snapshots):
     if not snapshots:
         print("❌ No snapshots found to build a leaderboard.")
         return
 
-    # ... (The entire calculation logic is identical to the previous version) ...
-    for snapshot in snapshots: snapshot['users_dict'] = {user['userId']: user for user in snapshot['users']}
+    for snapshot in snapshots:
+        snapshot['users_dict'] = {user['userId']: user for user in snapshot['users']}
     latest = snapshots[0]
     date_latest = datetime.strptime(latest["date"], "%Y-%m-%d")
+    
     def find_snapshot_closest_to(days_ago):
         target_date = date_latest - timedelta(days=days_ago)
         return min(snapshots, key=lambda x: abs(datetime.strptime(x['date'], "%Y-%m-%d") - target_date))
+    
     snapshot_7d, snapshot_30d, snapshot_90d, snapshot_120d = find_snapshot_closest_to(7), find_snapshot_closest_to(30), find_snapshot_closest_to(90), find_snapshot_closest_to(120)
     print(f"ℹ️ Using snapshots for comparison: 7d -> {snapshot_7d['date']}, 120d -> {snapshot_120d['date']}")
+    
     leaderboard = []
     for user_id, user_data in latest['users_dict'].items():
         current_merit = user_data["merits"]
@@ -47,11 +129,8 @@ def build_and_save_leaderboard(snapshots):
         "leaderboard120d": sorted(leaderboard, key=lambda x: x["merit120d"], reverse=True)[:200]
     }
     
-    # --- CHANGE: Upload the final data to Vercel Blob ---
     try:
         print("⬆️ Uploading leaderboard data to Vercel Blob...")
-        # The 'pathname' is the name of the file in the blob store.
-        # 'addRandomSuffix: False' ensures the URL is always the same.
         blob_result = put(
             'leaderboard_latest.json', 
             json.dumps(final_data, indent=2), 
@@ -67,7 +146,6 @@ if __name__ == "__main__":
     parser.add_argument('--mode', type=str, default='initial', choices=['initial', 'update'])
     args = parser.parse_args()
     
-    # --- IMPORTANT: Ensure the VERCEL_TOKEN is available ---
     if not os.environ.get('VERCEL_TOKEN'):
         print("❌ VERCEL_TOKEN environment variable not found. Cannot upload.")
     else:
