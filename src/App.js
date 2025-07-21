@@ -1,6 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, query, where, orderBy, Timestamp } from 'firebase/firestore';
+import Leaderboard from './Leaderboard';
+import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
+
+// Inside App component:
+<Router>
+  <nav>
+    <Link to="/">Home</Link> | <Link to="/leaderboard">Leaderboard</Link>
+  </nav>
+  <Routes>
+    <Route path="/" element={<Home />} />
+    <Route path="/leaderboard" element={<Leaderboard />} />
+  </Routes>
+</Router>
+
 
 // =================================================================================
 // PASTE YOUR FIREBASE CONFIGURATION HERE (If you haven't already)
