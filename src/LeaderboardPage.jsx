@@ -143,7 +143,9 @@ function LeaderboardPage() {
                             {user.username}
                         </a>
                     </Td>
-                    <Td className="font-semibold text-green-600">{user.meritChange}</Td>
+                    <Td className="font-semibold text-green-600">
+  {user[`merit${activeTab}`]}
+</Td>
                 </Tr>
             ))}
         </Tbody>
