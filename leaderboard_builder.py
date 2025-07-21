@@ -133,7 +133,7 @@ def build_and_save_leaderboard(snapshots):
         print("⬆️ Uploading leaderboard data to Vercel Blob...")
         blob_result = put(
             'leaderboard_latest.json', 
-            json.dumps(final_data, indent=2), 
+            json.dumps(final_data, indent=2).encode('utf-8'), # <<< FINAL FIX IS HERE
             options={'addRandomSuffix': False, 'token': os.environ.get('VERCEL_TOKEN')}
         )
         print(f"✅ Leaderboard successfully uploaded! URL: {blob_result['url']}")
