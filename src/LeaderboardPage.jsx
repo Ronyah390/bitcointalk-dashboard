@@ -44,7 +44,7 @@ function LeaderboardPage() {
 
   useEffect(() => {
     // This is the permanent URL to your data file.
-    const LEADERBOARD_URL = 'https://ng5bxvcway3txugt.public.blob.vercel-storage.com/leaderboard_latest.json';
+    const LEADERBOARD_URL = 'https://ng5bvcmay3txuqgt.public.blob.vercel-storage.com/leaderboard_latest.json';
 
     fetch(LEADERBOARD_URL)
       .then(response => response.ok ? response.json() : Promise.reject('Network response was not ok'))
