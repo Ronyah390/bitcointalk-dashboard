@@ -121,19 +121,20 @@ def build_and_save_leaderboard(snapshots):
             return current_merit - prev_user["merits"] if prev_user else current_merit
         leaderboard.append({ "username": user_data["username"], "userId": user_id, "currentMerit": current_merit, "merit7d": delta(snapshot_7d), "merit30d": delta(snapshot_30d), "merit90d": delta(snapshot_90d), "merit120d": delta(snapshot_120d) })
     
+    # --- CHANGE: No longer slicing to top 200. Saves ALL data. ---
     final_data = {
         "lastUpdated": datetime.now().isoformat(),
-        "leaderboard7d": sorted(leaderboard, key=lambda x: x["merit7d"], reverse=True)[:200],
-        "leaderboard30d": sorted(leaderboard, key=lambda x: x["merit30d"], reverse=True)[:200],
-        "leaderboard90d": sorted(leaderboard, key=lambda x: x["merit90d"], reverse=True)[:200],
-        "leaderboard120d": sorted(leaderboard, key=lambda x: x["merit120d"], reverse=True)[:200]
+        "leaderboard7d": sorted(leaderboard, key=lambda x: x["merit7d"], reverse=True),
+        "leaderboard30d": sorted(leaderboard, key=lambda x: x["merit30d"], reverse=True),
+        "leaderboard90d": sorted(leaderboard, key=lambda x: x["merit90d"], reverse=True),
+        "leaderboard120d": sorted(leaderboard, key=lambda x: x["merit120d"], reverse=True)
     }
     
     try:
         print("⬆️ Uploading leaderboard data to Vercel Blob...")
         blob_result = put(
             'leaderboard_latest.json', 
-            json.dumps(final_data, indent=2).encode('utf-8'), # <<< FINAL FIX IS HERE
+            json.dumps(final_data).encode('utf-8'), # Encode to bytes for upload
             options={'addRandomSuffix': False, 'token': os.environ.get('VERCEL_TOKEN')}
         )
         print(f"✅ Leaderboard successfully uploaded! URL: {blob_result['url']}")

@@ -1,23 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, query, where, orderBy, Timestamp } from 'firebase/firestore';
-import Leaderboard from './Leaderboard';
-import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
-
-// Inside App component:
-<Router>
-  <nav>
-    <Link to="/">Home</Link> | <Link to="/leaderboard">Leaderboard</Link>
-  </nav>
-  <Routes>
-    <Route path="/" element={<Home />} />
-    <Route path="/leaderboard" element={<Leaderboard />} />
-  </Routes>
-</Router>
-
+import LeaderboardPage from './LeaderboardPage'; // Import the new leaderboard component
 
 // =================================================================================
-// PASTE YOUR FIREBASE CONFIGURATION HERE (If you haven't already)
+// YOUR FIREBASE CONFIGURATION
 // =================================================================================
 const firebaseConfig = {
   apiKey: "AIzaSyCv5xSMUSt5zu2MKS6AuA-fq2eP7wAXlcA",
@@ -33,7 +20,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// CORRECTED rank requirements based on the official forum post.
 const RANK_REQUIREMENTS = {
     'Brand new': { merit: 0, next: 'Newbie' },
     'Newbie': { merit: 0, next: 'Jr. Member' },
@@ -59,13 +45,28 @@ const getNextRankInfo = (currentRank, currentMerit) => {
 
 // --- React Components ---
 
-const Header = ({ onNavigate }) => (
+const Header = ({ onNavigate, currentPage }) => (
     <header className="bg-white shadow-md sticky top-0 z-10">
         <div className="container mx-auto px-6 py-4 flex justify-between items-center">
             <div className="text-2xl font-bold text-gray-800 tracking-wider cursor-pointer flex items-center" onClick={() => onNavigate('home')}>
                  <svg className="w-8 h-8 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 Bitcointalk Dashboard
             </div>
+            {/* --- UPDATED: Navigation Buttons --- */}
+            <nav className="flex space-x-2">
+                <button 
+                    onClick={() => onNavigate('home')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${currentPage === 'home' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                >
+                    Home
+                </button>
+                <button 
+                    onClick={() => onNavigate('leaderboard')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${currentPage === 'leaderboard' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                >
+                    Leaderboard
+                </button>
+            </nav>
         </div>
     </header>
 );
@@ -94,7 +95,7 @@ const HomePage = ({ onNavigate }) => (
 );
 
 const UserTable = ({ users, title, description, type }) => {
-    if (users.length === 0 && type !== 'active') { // Show special empty state for non-active pages
+    if (users.length === 0 && type !== 'active') {
         return (
              <div className="text-center py-10 bg-white p-6 rounded-lg shadow-lg">
                 <h2 className="text-3xl font-bold text-gray-800 mb-2">{title}</h2>
@@ -108,8 +109,6 @@ const UserTable = ({ users, title, description, type }) => {
         <div className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl">
             <h2 className="text-3xl font-bold text-gray-800 mb-2">{title}</h2>
             <p className="text-gray-500 mb-6">{description}</p>
-
-            {/* --- NEW SECTION FOR ACTIVE USERS --- */}
             {type === 'active' && (
                 <div className="bg-blue-50 border-l-4 border-blue-500 text-blue-800 p-4 rounded-r-lg mb-8">
                     <div className="flex items-center">
@@ -117,14 +116,12 @@ const UserTable = ({ users, title, description, type }) => {
                         <div>
                             <p className="font-bold">Total Active Users Found: {users.length}</p>
                             <p className="text-sm mt-1">
-                                Our scraper checks the forum every 10 minutes. This list shows all unique users seen in the last 24 hours. The full board will be completely updated by tomorrow.
+                                This list shows all unique users seen in the last 24 hours.
                             </p>
                         </div>
                     </div>
                 </div>
             )}
-            {/* --- END NEW SECTION --- */}
-
             {users.length > 0 ? (
                 <div className="overflow-x-auto">
                     <table className="min-w-full">
@@ -162,7 +159,7 @@ const UserTable = ({ users, title, description, type }) => {
 const LoadingSpinner = () => (
     <div className="flex flex-col items-center justify-center py-20">
         <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
-        <p className="mt-4 text-xl font-semibold text-gray-700">Fetching Data...</p>
+        <p className="mt-4 text-xl font-semibold text-gray-700">Fetching Data from Firebase...</p>
     </div>
 );
 
@@ -213,7 +210,8 @@ function App() {
 
     const handleNavigation = (targetPage) => {
         setPage(targetPage);
-        if (targetPage !== 'home') {
+        // Only fetch from firebase if it's one of the original pages
+        if (['active', 'rankup', 'promoted'].includes(targetPage)) {
             fetchUsers(targetPage);
         }
     };
@@ -230,6 +228,8 @@ function App() {
                 return <UserTable users={users} title="Close to Next Rank" description="Jr. Members needing ≤2 merit, and other ranks needing ≤20." type="rankup" />;
             case 'promoted':
                  return <UserTable users={users} title="Recently Promoted" description="Users who have ranked up in the last 7 days." type="promoted" />;
+            case 'leaderboard':
+                return <LeaderboardPage />;
             case 'home':
             default:
                 return <HomePage onNavigate={handleNavigation} />;
@@ -238,7 +238,7 @@ function App() {
 
     return (
         <div className="bg-gray-50 min-h-screen font-sans">
-            <Header onNavigate={handleNavigation} />
+            <Header onNavigate={handleNavigation} currentPage={page} />
             <main className="container mx-auto px-4 sm:px-6 py-12">
                 {renderPage()}
             </main>
