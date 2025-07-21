@@ -121,7 +121,6 @@ def build_and_save_leaderboard(snapshots):
             return current_merit - prev_user["merits"] if prev_user else current_merit
         leaderboard.append({ "username": user_data["username"], "userId": user_id, "currentMerit": current_merit, "merit7d": delta(snapshot_7d), "merit30d": delta(snapshot_30d), "merit90d": delta(snapshot_90d), "merit120d": delta(snapshot_120d) })
     
-    # --- CHANGE: No longer slicing to top 200. Saves ALL data. ---
     final_data = {
         "lastUpdated": datetime.now().isoformat(),
         "leaderboard7d": sorted(leaderboard, key=lambda x: x["merit7d"], reverse=True),
@@ -134,8 +133,12 @@ def build_and_save_leaderboard(snapshots):
         print("⬆️ Uploading leaderboard data to Vercel Blob...")
         blob_result = put(
             'leaderboard_latest.json', 
-            json.dumps(final_data).encode('utf-8'), # Encode to bytes for upload
-            options={'addRandomSuffix': False, 'token': os.environ.get('VERCEL_TOKEN')}
+            json.dumps(final_data).encode('utf-8'),
+            options={
+                'addRandomSuffix': False, 
+                'token': os.environ.get('VERCEL_TOKEN'),
+                'allowOverwrite': True # --- THIS IS THE FIX ---
+            }
         )
         print(f"✅ Leaderboard successfully uploaded! URL: {blob_result['url']}")
     except Exception as e:
