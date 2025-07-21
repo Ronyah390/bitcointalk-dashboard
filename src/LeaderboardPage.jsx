@@ -43,7 +43,9 @@ function LeaderboardPage() {
   const USERS_PER_PAGE = 100;
 
   useEffect(() => {
+    // This is the permanent URL to your data file.
     const LEADERBOARD_URL = 'https://ng5bxvcway3txugt.public.blob.vercel-storage.com/leaderboard_latest.json';
+
     fetch(LEADERBOARD_URL)
       .then(response => response.ok ? response.json() : Promise.reject('Network response was not ok'))
       .then(data => setLeaderboardData(data))
@@ -70,7 +72,7 @@ function LeaderboardPage() {
         return { 
             currentList: results, 
             totalPages: 1, 
-            searchResult: results.length > 0 ? results : null 
+            searchResult: results.length > 0 ? results : { length: 0 } 
         };
     }
     
@@ -118,10 +120,9 @@ function LeaderboardPage() {
         ))}
       </div>
       
-      {searchResult && (
-        <div className="bg-blue-50 border-l-4 border-blue-500 text-blue-800 p-4 rounded-r-lg mb-6">
-            <h3 className="font-bold">Search Results for "{searchTerm}"</h3>
-            {searchResult.length === 1 && <p>Found user at rank #{searchResult[0].rank}.</p>}
+      {searchResult && searchResult.length === 0 && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-r-lg mb-6">
+            <p>No users found matching "{searchTerm}".</p>
         </div>
       )}
 
