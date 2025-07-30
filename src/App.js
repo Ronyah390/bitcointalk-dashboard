@@ -21,14 +21,14 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const RANK_REQUIREMENTS = {
-    'Brand new': { merit: 0, next: 'Newbie' },
-    'Newbie': { merit: 0, next: 'Jr. Member' },
-    'Jr. Member': { merit: 1, next: 'Member' },
-    'Member': { merit: 10, next: 'Full Member' },
-    'Full Member': { merit: 100, next: 'Sr. Member' },
-    'Sr. Member': { merit: 250, next: 'Hero Member' },
-    'Hero Member': { merit: 500, next: 'Legendary' },
-    'Legendary': { merit: 1000, next: null }
+    'Brand new': { merit: 0, activity: 0, next: 'Newbie' },
+    'Newbie': { merit: 0, activity: 0, next: 'Jr. Member' },
+    'Jr. Member': { merit: 1, activity: 30, next: 'Member' },
+    'Member': { merit: 10, activity: 60, next: 'Full Member' },
+    'Full Member': { merit: 100, activity: 120, next: 'Sr. Member' },
+    'Sr. Member': { merit: 250, activity: 240, next: 'Hero Member' },
+    'Hero Member': { merit: 500, activity: 480, next: 'Legendary' },
+    'Legendary': { merit: 1000, activity: 775, next: null } // Using lower bound of 775-1030
 };
 
 const getNextRankInfo = (currentRank, currentMerit) => {
@@ -43,6 +43,16 @@ const getNextRankInfo = (currentRank, currentMerit) => {
     };
 };
 
+const getActivityCheckStatus = (user) => {
+    const { nextRank } = getNextRankInfo(user.rank, user.merit);
+    if (!nextRank) return 'N/A';
+    const requiredActivity = RANK_REQUIREMENTS[nextRank]?.activity;
+    if (typeof user.activity === 'undefined') return 'N/A';
+    if (requiredActivity === 0) return 'Met';
+    return user.activity >= requiredActivity ? 'Met' : 'Not Met';
+};
+
+
 // --- React Components ---
 
 const Header = ({ onNavigate, currentPage }) => (
@@ -52,7 +62,6 @@ const Header = ({ onNavigate, currentPage }) => (
                  <svg className="w-8 h-8 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 Bitcointalk Dashboard
             </div>
-            {/* --- NEW: Navigation Buttons --- */}
             <nav className="flex space-x-2">
                 <button 
                     onClick={() => onNavigate('home')}
@@ -130,9 +139,11 @@ const UserTable = ({ users, title, description, type }) => {
                                 <th className="text-left py-3 px-4 sm:px-6 uppercase font-semibold text-sm text-gray-600 tracking-wider">Username</th>
                                 <th className="text-left py-3 px-4 sm:px-6 uppercase font-semibold text-sm text-gray-600 tracking-wider">Rank</th>
                                 <th className="text-left py-3 px-4 sm:px-6 uppercase font-semibold text-sm text-gray-600 tracking-wider">Merit</th>
-                                <th className="text-left py-3 px-4 sm:px-6 uppercase font-semibold text-sm text-gray-600 tracking-wider">Posts</th>
+                                {type !== 'rankup' && <th className="text-left py-3 px-4 sm:px-6 uppercase font-semibold text-sm text-gray-600 tracking-wider">Posts</th>}
                                 {type === 'rankup' && <th className="text-left py-3 px-4 sm:px-6 uppercase font-semibold text-sm text-gray-600 tracking-wider">Merit for Next Rank</th>}
+                                {type === 'rankup' && <th className="text-left py-3 px-4 sm:px-6 uppercase font-semibold text-sm text-gray-600 tracking-wider">Activity Check</th>}
                                 {type === 'promoted' && <th className="text-left py-3 px-4 sm:px-6 uppercase font-semibold text-sm text-gray-600 tracking-wider">Promoted On</th>}
+                                <th className="text-left py-3 px-4 sm:px-6 uppercase font-semibold text-sm text-gray-600 tracking-wider">Last Seen</th>
                             </tr>
                         </thead>
                         <tbody className="text-gray-700 divide-y divide-gray-200">
@@ -141,9 +152,11 @@ const UserTable = ({ users, title, description, type }) => {
                                     <td className="py-4 px-4 sm:px-6"><a href={user.profileUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-semibold">{user.username}</a></td>
                                     <td className="py-4 px-4 sm:px-6">{user.rank}</td>
                                     <td className="py-4 px-4 sm:px-6">{user.merit}</td>
-                                    <td className="py-4 px-4 sm:px-6">{user.posts}</td>
+                                    {type !== 'rankup' && <td className="py-4 px-4 sm:px-6">{user.posts}</td>}
                                     {type === 'rankup' && <td className="py-4 px-4 sm:px-6 font-bold text-green-600">{user.meritNeeded}</td>}
+                                    {type === 'rankup' && <td className={`py-4 px-4 sm:px-6 font-semibold ${user.activityStatus === 'Met' ? 'text-green-600' : 'text-red-500'}`}>{user.activityStatus}</td>}
                                     {type === 'promoted' && <td className="py-4 px-4 sm:px-6">{user.promotedAt ? new Date(user.promotedAt.seconds * 1000).toLocaleDateString() : 'N/A'}</td>}
+                                    <td className="py-4 px-4 sm:px-6">{user.lastScrapedAt ? new Date(user.lastScrapedAt.seconds * 1000).toLocaleDateString() : 'N/A'}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -155,6 +168,7 @@ const UserTable = ({ users, title, description, type }) => {
         </div>
     );
 };
+
 
 const LoadingSpinner = () => (
     <div className="flex flex-col items-center justify-center py-20">
@@ -188,17 +202,27 @@ function App() {
             const querySnapshot = await getDocs(q);
             let fetchedUsers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
+            if (filterType === 'promoted') {
+                fetchedUsers = fetchedUsers.filter(user => user.rank !== 'Newbie');
+            }
+
             if (filterType === 'rankup') {
-                fetchedUsers = fetchedUsers.map(user => {
-                    const { needed } = getNextRankInfo(user.rank, user.merit);
-                    return { ...user, meritNeeded: needed };
-                }).filter(user => {
-                    const rank = user.rank;
-                    const needed = user.meritNeeded;
-                    if (rank === 'Brand new' || rank === 'Newbie') return false;
-                    if (rank === 'Jr. Member') return needed > 0 && needed <= 2;
-                    return needed > 0 && needed <= 20;
-                });
+                const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
+                fetchedUsers = fetchedUsers
+                    .filter(user => user.lastScrapedAt && (Date.now() - user.lastScrapedAt.toMillis() < thirtyDaysInMs))
+                    .map(user => {
+                        const { needed } = getNextRankInfo(user.rank, user.merit);
+                        const activityStatus = getActivityCheckStatus(user);
+                        return { ...user, meritNeeded: needed, activityStatus };
+                    }).filter(user => {
+                        const rank = user.rank;
+                        const needed = user.meritNeeded;
+                        if (rank === 'Brand new' || rank === 'Newbie') return false;
+                        if (rank === 'Jr. Member') return needed > 0 && needed <= 2;
+                        return needed > 0 && needed <= 20;
+                    })
+                    // --- NEW: Sort the final list by the 'Last Seen' date in descending order ---
+                    .sort((a, b) => b.lastScrapedAt.toMillis() - a.lastScrapedAt.toMillis());
             }
             
             setUsers(fetchedUsers);
@@ -210,14 +234,12 @@ function App() {
 
     const handleNavigation = (targetPage) => {
         setPage(targetPage);
-        // Only fetch from firebase if it's one of the original pages
         if (['active', 'rankup', 'promoted'].includes(targetPage)) {
             fetchUsers(targetPage);
         }
     };
 
     const renderPage = () => {
-        // --- UPDATED: No longer show loading spinner for leaderboard as it has its own ---
         if (loading && page !== 'leaderboard') {
             return <LoadingSpinner />;
         }
@@ -226,9 +248,9 @@ function App() {
             case 'active':
                 return <UserTable users={users} title="24h Active Users" description="A list of users who have posted on the forum recently." type="active" />;
             case 'rankup':
-                return <UserTable users={users} title="Close to Next Rank" description="Jr. Members needing ≤2 merit, and other ranks needing ≤20." type="rankup" />;
+                return <UserTable users={users} title="Close to Next Rank" description="Active users in the last 30 days who are close to promotion." type="rankup" />;
             case 'promoted':
-                 return <UserTable users={users} title="Recently Promoted" description="Users who have ranked up in the last 7 days." type="promoted" />;
+                 return <UserTable users={users} title="Recently Promoted" description="Users (Jr. Member and above) who have ranked up in the last 7 days." type="promoted" />;
             case 'leaderboard':
                 return <LeaderboardPage />;
             case 'home':
